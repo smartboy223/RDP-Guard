@@ -1,122 +1,87 @@
-# RDP-Guard
+![RDP-Guard banner](RDP-Guard.png)
 
-**Harden an internet-exposed Windows RDP endpoint and auto-ban brute-force scanners — with all alerting kept local.**
+# 🛡️ RDP-Guard
 
-RDP-Guard is a small, self-contained PowerShell toolkit for the common-but-risky
-situation where you *must* expose Remote Desktop to the public internet (you
-connect from changing locations, can't run a VPN client from the remote side, and
-can't geo/IP allow-list). Changing the RDP port alone is just
-security-through-obscurity — mass scanners still find it within hours. RDP-Guard
-adds real defense-in-depth and a fail2ban-style auto-blocker.
+**A local Windows RDP security monitor that hardens exposed Remote Desktop, blocks brute-force scanners, and alerts you when something important happens.**
 
-> ⚠️ **Reality check:** an exposed RDP port is inherently riskier than a VPN-gated
-> one. RDP-Guard reduces that risk substantially; it does not make it zero. If you
-> *can* use a VPN/RD-Gateway, do that instead. If you can't, this is for you — and
-> you should still add [MFA](#optional-mobile-approval--mfa).
+RDP-Guard is for people who must keep Remote Desktop reachable from the public internet, but still want a stronger safety layer than "change the port and hope nobody finds it." Internet-wide scanners constantly look for RDP. Once they find it, they try usernames, passwords, and repeated connection attempts until something gives.
+
+RDP-Guard adds a fail2ban-style defense for Windows:
+
+- 🚫 **Auto-ban attackers** after repeated failed RDP attempts.
+- 🔥 **Keep one clean firewall block rule** instead of hundreds of messy rules.
+- 👀 **Monitor successful logins** so you can spot access that was not you.
+- 🔔 **Show local Windows toast alerts** for bans and RDP logins.
+- 🔐 **Apply RDP hardening** such as NLA, TLS, high encryption, password policy, session limits, and larger Security logs.
+- 🧰 **Stay local-only**: no cloud service, no webhook, no telemetry, no third-party account.
+
+> ⚠️ Exposing RDP directly to the internet is always risky. A VPN, RD Gateway, or MFA-gated setup is better when possible. RDP-Guard is the extra protection layer for the real-world case where public RDP must stay open.
+
+## 🚀 Fast Install
+
+Open **Command Prompt as Administrator**, paste this, and press Enter:
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $dir='C:\Security\RDP-Guard'; New-Item -ItemType Directory -Force -Path 'C:\Security' | Out-Null; if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }; $zip=\"$env:TEMP\RDP-Guard.zip\"; Invoke-WebRequest 'https://github.com/smartboy223/RDP-Guard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive $zip -DestinationPath 'C:\Security' -Force; Rename-Item 'C:\Security\RDP-Guard-main' 'RDP-Guard'; powershell -ExecutionPolicy Bypass -File \"$dir\Install.ps1\""
+```
+
+Then validate it:
+
+```bat
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Test-RDPGuard.ps1"
+```
+
+The installer creates the firewall rules, applies hardening, creates the `RDP-Guard` event log, and registers the startup monitor task. The engine runs as `SYSTEM` at startup and every minute.
+
+**Before install:** edit `config.json` if your RDP port is not `4002`.
+
+## Why You Need This
+
+Changing the RDP port is not enough. It only hides the service from the laziest scans. Real scanners sweep all ports and will eventually find open RDP.
+
+Once found, an exposed RDP service needs more than a firewall allow rule:
+
+- Attackers can flood failed logins and fill your logs.
+- NLA pre-auth failures may not always appear as standard Security `4625` events.
+- Repeated attempts from the same source should be blocked automatically.
+- You need to know when someone successfully logs in, not only when they fail.
+- Manual firewall cleanup becomes painful if every bad IP becomes its own rule.
+
+RDP-Guard handles that routine defensive work for you while keeping everything on your machine.
+
+## What It Protects
+
+| Layer | What RDP-Guard Does |
+|------|----------------------|
+| 🧱 Firewall | Creates one clean public RDP allow rule and one maintained block rule |
+| 🚨 Detection | Watches Security `4625` and RDP Core `140` failures |
+| ⛔ Blocking | Bans IPs after repeated failures in a time window |
+| 📈 Escalation | Repeat offenders get longer bans automatically |
+| 🧹 Cleanup | Expired bans are removed from the active firewall rule |
+| 🔔 Alerts | Optional local toast notifications for bans and successful RDP logins |
+| 📜 Audit | Writes ban/unban events to the local `RDP-Guard` Windows Event Log |
+| 🔐 Hardening | Enforces stronger RDP/security settings during install |
 
 ## Features
 
-- **Firewall hygiene** — disables stale default RDP rules, replaces ad-hoc rules
-  with one clean inbound rule on your chosen port.
-- **Auto-blocker** — a SYSTEM scheduled task watches failed logins and bans
-  offending IPs via a single, self-maintaining firewall rule.
-  - Reads **both** the Security log (Event 4625) **and** the RDP core log
-    (`RdpCoreTS/Operational` Event 140) — so it catches scanners rejected at the
-    NLA pre-auth stage that never generate a 4625.
-  - **Real ban expiry** with **escalating** bans for repeat offenders.
-  - **Correct CIDR** whitelisting (never blocks your LAN/loopback).
-  - **One** firewall rule, rebuilt from a JSON state file — no rule sprawl.
-- **Hardening** — strong password policy, High RDP encryption, NLA + TLS, session
-  idle/disconnect timeouts, and a larger Security log so floods don't roll events.
-- **Local-only alerting** — every ban/unban is written to a dedicated `RDP-Guard`
-  Windows Event Log, and optional **Windows toast popups** fire on a ban or a
-  successful RDP login. Nothing is sent to any external service.
-- **Admin tooling** — list/inspect bans, manually block/unblock, and an
-  on-demand activity report (top offenders, targeted usernames, *successful*
-  logins) via `Show-Activity` / `View-Activity.cmd`.
+- **Firewall hygiene**: disables stale default RDP rules and replaces ad-hoc rules with one clean inbound rule on your chosen port.
+- **Auto-blocker**: watches failed logins and bans offending IPs via a single self-maintaining firewall rule.
+- **Better RDP detection**: reads both Security log Event `4625` and `Microsoft-Windows-RemoteDesktopServices-RdpCoreTS/Operational` Event `140`, catching scanners rejected before normal credential events.
+- **Real ban expiry**: bans expire automatically, and repeat offenders receive longer bans.
+- **CIDR whitelist support**: loopback, LAN, link-local, and private ranges are protected from accidental blocking.
+- **Local monitor and alerts**: ban/unban events are written locally, and optional toast alerts appear for new bans and successful RDP logins.
+- **Admin commands**: list bans, manually block/unblock, and generate activity reports.
 
 ## Requirements
 
-- Windows 10/11 **Pro** (or Server). Works under both Windows PowerShell 5.1 and
-  PowerShell 7+ (event logging uses the `System.Diagnostics.EventLog` .NET API so
-  it behaves the same on either).
+- Windows 10/11 Pro or Windows Server.
 - Administrator rights to install.
-
-## Install
-
-```powershell
-# from an elevated PowerShell
-git clone https://github.com/smartboy223/RDP-Guard.git C:\Security\RDP-Guard
-powershell -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Install.ps1"
-```
-
-The installer applies the firewall changes, hardening, creates the `RDP-Guard`
-event log, and registers the scheduled task (runs at startup + every minute).
-
-**Set your port first:** edit `rdpPort` in [`config.json`](#configuration) to match
-your RDP port *before* installing (default `4002`).
-
-Options:
-- `-SkipHardening` — install only the firewall cleanup + auto-blocker.
-- `-DisableBuiltinAdmin` — also disable the built-in Administrator account
-  (only if you have another working admin account).
-
-### Validate the install
-
-After installing, confirm everything works (double-click **`Validate-Setup.cmd`**,
-or run `Test-RDPGuard.ps1`). It checks the config, event log, scheduled tasks,
-firewall rule, and listening port, then runs a **live ban-pipeline self-test**
-(blocks a reserved TEST-NET IP → verifies it lands in the state file, firewall
-rule, and event log → unblocks it) and shows two example toasts. You should see a
-`PASS / WARN / FAIL` summary ending in "RDP-Guard is installed and working."
-
-> On a brand-new install the engine's "last run result" may show a `WARN` until the
-> task's first scheduled tick — that's expected.
-
-## Usage
-
-```powershell
-Import-Module "C:\Security\RDP-Guard\RDP-Guard.Admin.psm1" -Force
-
-Get-RDPGuardBans                 # currently active bans
-Get-RDPGuardBans -IncludeExpired # full history
-Get-RDPGuardReport -Hours 24     # offenders, targeted usernames, SUCCESSFUL logins
-Block-RDPGuardIP   -IP 1.2.3.4 -Permanent
-Unblock-RDPGuardIP -IP 1.2.3.4
-```
-
-**View activity anytime:** double-click **`View-Activity.cmd`** (prompts for admin)
-for a one-shot report, or:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Show-Activity.ps1" -Hours 72
-```
-
-**Raw ban/unban log:**
-
-```powershell
-Get-WinEvent -LogName 'RDP-Guard' -MaxEvents 20
-```
-
-> Tip: check the **successful logins** section of the report regularly — if a login
-> wasn't you, you'll see it there (with the source IP).
-
-### Local toast alerts
-
-With `alerts.toast` enabled in `config.json` (default), `Install.ps1` registers two
-small user-context, event-triggered tasks that pop a native Windows toast:
-
-- **On ban** — when the engine blocks an IP.
-- **On RDP login** — when a session authenticates (your "someone just logged in"
-  signal; if it wasn't you, investigate).
-
-These run in your interactive session (the engine runs as SYSTEM and can't draw to
-your desktop), use the built-in WinRT toast API with a tray-balloon fallback, and
-send nothing off the machine. Toggle them with `alerts.onBan` / `alerts.onLogin`.
+- Windows PowerShell 5.1 or PowerShell 7+.
+- Remote Desktop already enabled on the machine.
 
 ## Configuration
 
-All tunables live in `config.json`; the engine re-reads it every run (no restart).
+All tunables live in `config.json`; the engine re-reads it every run.
 
 | Key | Default | Meaning |
 |-----|---------|---------|
@@ -124,90 +89,122 @@ All tunables live in `config.json`; the engine re-reads it every run (no restart
 | `threshold` | `6` | Failures from one IP before a ban |
 | `lookbackMinutes` | `15` | Sliding window for counting failures |
 | `banHours` | `24` | Base ban length |
-| `escalation` | ×2, cap 720h | Repeat offenders get longer bans |
-| `whitelist` | RFC1918 + loopback | Never-block ranges (CIDR supported) |
-| `retentionDays` | `30` | How long expired records are kept (for escalation memory) |
-| `hardening.*` | — | Values applied by `Install.ps1` |
+| `escalation` | x2, cap 720h | Repeat offenders get longer bans |
+| `whitelist` | RFC1918 + loopback | Never-block ranges, CIDR supported |
+| `retentionDays` | `30` | How long expired records are kept for escalation memory |
+| `alerts.toast` | `true` | Enable local Windows toast alerts |
 
-## How it works
+## Daily Use
 
-```
-                 ┌──────────────────────────── every 1 min (SYSTEM task) ───────────────┐
- Security 4625 ─▶│ read failures in window ─▶ count by IP ─▶ ≥ threshold & not          │
- RdpCoreTS 140 ─▶│   whitelisted ─▶ add/extend ban in state.json (escalating)           │
-                 │ expire old bans ─▶ rebuild ONE firewall block rule ─▶ log to EventLog │
-                 └──────────────────────────────────────────────────────────────────────┘
+Import the admin module:
+
+```powershell
+Import-Module "C:\Security\RDP-Guard\RDP-Guard.Admin.psm1" -Force
 ```
 
-Block rules take precedence over allow rules in Windows Firewall, so a banned IP
-cannot reach the RDP port even though the port is open to everyone else.
+Useful commands:
 
-## Optional: mobile approval / MFA
+```powershell
+Get-RDPGuardBans
+Get-RDPGuardBans -IncludeExpired
+Get-RDPGuardReport -Hours 24
+Block-RDPGuardIP -IP 1.2.3.4 -Permanent
+Unblock-RDPGuardIP -IP 1.2.3.4
+```
 
-The single highest-value upgrade for an exposed endpoint is **multi-factor auth at
-logon**, because it works with the stock RDP client (`mstsc`) and needs nothing
-installed on the device you connect *from*:
+View activity with one command:
 
-- **[Duo Authentication for Windows Logon](https://duo.com/docs/rdp)** — tap-to-approve
-  push on your phone after the password. Free for personal use (≤10 users).
-- **[multiOTP Credential Provider](https://github.com/multiOTP/multiOTPCredentialProvider)** —
-  fully open-source / self-hosted; a 6-digit code from any authenticator app.
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Show-Activity.ps1" -Hours 72
+```
 
-These are separate products (not bundled here) precisely so RDP-Guard stays
-self-contained and local-only. Pick one if you want "confirm from my phone to log
-in."
+Raw event log:
 
-## Security notes & trade-offs
+```powershell
+Get-WinEvent -LogName 'RDP-Guard' -MaxEvents 20
+```
 
-- **Account lockout vs. DoS:** if Windows account lockout is enabled (recommended),
-  an attacker who guesses your *username* can lock that account (a nuisance/DoS).
-  Mitigate with a **non-obvious RDP username** and let RDP-Guard ban the source IP
-  fast. Don't expose the built-in `Administrator`.
-- **Don't RDP as an admin if you can avoid it.** Prefer a dedicated standard user
-  in *Remote Desktop Users*.
-- **Locking yourself out:** the threshold (6) is above typical typo counts, and
-  private ranges are never blocked. If your public IP is ever banned, clear it from
-  a console/another machine — see below.
+## Local Security Monitor
 
-### "I locked myself out"
+The monitor is the part that makes this more useful than a one-time hardening script.
+
+Every minute, the scheduled task:
+
+1. Reads recent failed RDP events.
+2. Counts failures by source IP.
+3. Skips trusted/whitelisted ranges.
+4. Adds or extends bans for repeated attackers.
+5. Expires old bans.
+6. Rebuilds one Windows Firewall block rule.
+7. Writes a local event log entry.
+8. Triggers optional local toast alerts.
+
+Successful RDP logins are also visible in the activity report and can trigger a toast notification. That matters because the most important signal is not only "someone failed"; it is "someone got in."
+
+## Validate Setup
+
+Run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Test-RDPGuard.ps1"
+```
+
+The validator checks config, event log, scheduled tasks, firewall rules, listening port, and the full ban pipeline. It blocks a reserved test IP, verifies it appears in state/firewall/event log, then removes it.
+
+## Optional MFA
+
+The strongest upgrade for exposed RDP is MFA at Windows logon:
+
+- [Duo Authentication for Windows Logon](https://duo.com/docs/rdp)
+- [multiOTP Credential Provider](https://github.com/multiOTP/multiOTPCredentialProvider)
+
+RDP-Guard does not bundle these. It stays self-contained and local-only, but MFA is strongly recommended if your endpoint is exposed.
+
+## If You Lock Yourself Out
+
+From console access or another admin path:
 
 ```powershell
 Import-Module "C:\Security\RDP-Guard\RDP-Guard.Admin.psm1" -Force
 Unblock-RDPGuardIP -IP <your-public-ip>
-# or clear everything in a pinch:
+```
+
+Emergency clear:
+
+```powershell
 Get-NetFirewallRule -DisplayName 'RDP-Guard-Block' | Remove-NetFirewallRule
 ```
-(A bad password lockout is more likely — that's the OS account-lockout policy;
-wait out the lockout window or reset from the console.)
 
 ## Uninstall
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Uninstall.ps1"
-# -RemoveEventLog  also delete the RDP-Guard log
-# -RemoveAllowRule also remove the RDP allow rule (closes the port!)
 ```
-Hardening (password policy, encryption, timeouts) is intentionally left in place.
+
+Options:
+
+- `-RemoveEventLog`: delete the custom `RDP-Guard` event log.
+- `-RemoveAllowRule`: remove the RDP allow rule. This closes RDP through the firewall.
+
+Hardening settings are intentionally left in place.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `Install.ps1` / `Uninstall.ps1` | Setup / teardown |
-| `RDP-Guard.ps1` | Auto-blocker engine (run by the scheduled task; `-DryRun` to test) |
-| `RDP-Guard.Common.ps1` | Shared helpers (config/state/CIDR/firewall/logging) |
-| `RDP-Guard.Admin.psm1` | `Get-RDPGuardBans` / `Block` / `Unblock` / `Get-RDPGuardReport` |
-| `Show-Activity.ps1` / `View-Activity.cmd` | On-demand activity viewer |
-| `Test-RDPGuard.ps1` / `Validate-Setup.cmd` | End-to-end install validation / self-test |
-| `RDP-Guard.Toast.ps1` | Local toast popup shown by the alert tasks |
-| `config.json` | All tunables |
-| `state.json` | Persisted bans (created at runtime; git-ignored) |
+| `Install.ps1` / `Uninstall.ps1` | Setup and teardown |
+| `RDP-Guard.ps1` | Auto-blocker engine run by the scheduled task |
+| `RDP-Guard.Common.ps1` | Shared config, state, CIDR, firewall, and logging helpers |
+| `RDP-Guard.Admin.psm1` | Admin commands and reporting |
+| `Show-Activity.ps1` / `View-Activity.cmd` | Activity viewer |
+| `Test-RDPGuard.ps1` / `Validate-Setup.cmd` | End-to-end validation |
+| `RDP-Guard.Toast.ps1` | Local toast popups |
+| `config.json` | Tunable settings |
+| `state.json` | Runtime ban state, ignored by git |
 
 ## Disclaimer
 
-Provided as-is, no warranty. You are responsible for testing it in your own
-environment and for the security of your systems. Exposing RDP to the internet
-carries inherent risk.
+Provided as-is, no warranty. You are responsible for testing it in your own environment and for the security of your systems. Exposing RDP to the internet carries inherent risk.
 
 ## License
 

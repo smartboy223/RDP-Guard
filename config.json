@@ -1,0 +1,40 @@
+{
+  "rdpPort": 4002,
+  "threshold": 6,
+  "lookbackMinutes": 15,
+  "banHours": 24,
+  "retentionDays": 30,
+  "escalation": {
+    "enabled": true,
+    "multiplierPerStrike": 2,
+    "maxBanHours": 720
+  },
+  "whitelist": [
+    "127.0.0.1",
+    "::1",
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "169.254.0.0/16",
+    "fe80::/10",
+    "fc00::/7"
+  ],
+  "eventLogName": "RDP-Guard",
+  "eventSource": "RDP-Guard",
+  "blockRuleName": "RDP-Guard-Block",
+  "stateFile": "state.json",
+  "alerts": {
+    "toast": true,
+    "onBan": true,
+    "onLogin": true
+  },
+  "hardening": {
+    "minPasswordLength": 14,
+    "passwordComplexity": true,
+    "passwordHistory": 5,
+    "minEncryptionLevel": 3,
+    "idleTimeoutMinutes": 30,
+    "disconnectedTimeoutMinutes": 480,
+    "securityLogSizeMB": 128
+  }
+}

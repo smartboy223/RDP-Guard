@@ -1,0 +1,11 @@
+# Runtime state — do not publish your own bans/logs
+state.json
+state.*.json
+rdp-guard.log
+
+# Local-only notes / overrides
+*.local.*
+
+# secedit scratch files
+*.sdb
+*.inf

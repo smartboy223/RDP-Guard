@@ -22,18 +22,25 @@ RDP-Guard adds a fail2ban-style defense for Windows:
 Open **Command Prompt as Administrator**, paste this, and press Enter:
 
 ```bat
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $dir='C:\Security\RDP-Guard'; New-Item -ItemType Directory -Force -Path 'C:\Security' | Out-Null; if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }; $zip=\"$env:TEMP\RDP-Guard.zip\"; Invoke-WebRequest 'https://github.com/smartboy223/RDP-Guard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive $zip -DestinationPath 'C:\Security' -Force; Rename-Item 'C:\Security\RDP-Guard-main' 'RDP-Guard'; powershell -ExecutionPolicy Bypass -File \"$dir\Install.ps1\""
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$cmd=Join-Path $env:TEMP 'Install-RDPGuard.cmd'; Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/smartboy223/RDP-Guard/main/Install-RDPGuard.cmd' -OutFile $cmd; & $cmd"
 ```
 
-Then validate it:
+The bootstrap installer will:
 
-```bat
-powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Security\RDP-Guard\Test-RDPGuard.ps1"
-```
+- ask which RDP port to protect,
+- download or update files in `C:\Security\RDP-Guard`,
+- preserve existing `config.json` values and `state.json` ban history,
+- avoid deleting the install folder blindly,
+- run `Install.ps1`,
+- run `Test-RDPGuard.ps1` validation.
 
 The installer creates the firewall rules, applies hardening, creates the `RDP-Guard` event log, and registers the startup monitor task. The engine runs as `SYSTEM` at startup and every minute.
 
-**Before install:** edit `config.json` if your RDP port is not `4002`.
+Already downloaded the repo? Run:
+
+```bat
+Install-RDPGuard.cmd
+```
 
 ## Why You Need This
 
@@ -92,6 +99,7 @@ All tunables live in `config.json`; the engine re-reads it every run.
 | `escalation` | x2, cap 720h | Repeat offenders get longer bans |
 | `whitelist` | RFC1918 + loopback | Never-block ranges, CIDR supported |
 | `retentionDays` | `30` | How long expired records are kept for escalation memory |
+| `allowRuleName` | `RDP-Guard-Allow` | Managed inbound RDP allow rule |
 | `alerts.toast` | `true` | Enable local Windows toast alerts |
 
 ## Daily Use
@@ -192,6 +200,7 @@ Hardening settings are intentionally left in place.
 
 | File | Purpose |
 |------|---------|
+| `Install-RDPGuard.cmd` | Safe bootstrap installer/updater with RDP port prompt |
 | `Install.ps1` / `Uninstall.ps1` | Setup and teardown |
 | `RDP-Guard.ps1` | Auto-blocker engine run by the scheduled task |
 | `RDP-Guard.Common.ps1` | Shared config, state, CIDR, firewall, and logging helpers |

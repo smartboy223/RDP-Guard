@@ -4,7 +4,7 @@
   Removes the RDP-Guard scheduled task and block rule. Run as Administrator.
 
 .DESCRIPTION
-  By default this leaves your RDP access (RDP-In-4002) and the hardening
+  By default this leaves your RDP access allow rule and the hardening
   (password policy, encryption, timeouts) in place, and only removes the
   active RDP-Guard pieces. Use the switches to remove more.
 
@@ -12,8 +12,8 @@
   Also delete the custom 'RDP-Guard' event log.
 
 .PARAMETER RemoveAllowRule
-  Also remove the RDP-In-4002 allow rule. WARNING: this stops RDP reaching
-  the machine through the firewall.
+  Also remove the configured RDP allow rule. WARNING: this stops RDP reaching
+  the machine through this firewall rule.
 #>
 [CmdletBinding()]
 param([switch]$RemoveEventLog, [switch]$RemoveAllowRule)
@@ -29,6 +29,7 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 
 . (Join-Path $root 'RDP-Guard.Common.ps1')
 $cfg = Get-RGConfig
+$allowRuleName = Get-RGProp $cfg 'allowRuleName' 'RDP-Guard-Allow'
 
 foreach ($tn in @('RDP-Guard', 'RDP-Guard-Toast-Ban', 'RDP-Guard-Toast-Login')) {
     Unregister-ScheduledTask -TaskName $tn -Confirm:$false -ErrorAction SilentlyContinue
@@ -39,8 +40,10 @@ Get-NetFirewallRule -DisplayName $cfg.blockRuleName -ErrorAction SilentlyContinu
 Write-Host "Removed firewall block rule: $($cfg.blockRuleName)"
 
 if ($RemoveAllowRule) {
-    Get-NetFirewallRule -DisplayName 'RDP-In-4002' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
-    Write-Host 'Removed RDP-In-4002 - RDP is no longer allowed through the firewall!' -ForegroundColor Yellow
+    foreach ($d in @($allowRuleName, 'RDP-In-4002') | Select-Object -Unique) {
+        Get-NetFirewallRule -DisplayName $d -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    }
+    Write-Host "Removed RDP allow rule '$allowRuleName' - RDP may no longer be allowed through the firewall." -ForegroundColor Yellow
 }
 
 if ($RemoveEventLog) {

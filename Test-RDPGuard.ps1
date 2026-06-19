@@ -66,8 +66,9 @@ if ([bool](Get-RGProp $alerts 'toast' $false)) {
 }
 
 Write-Host "`n[3] Firewall & listener"
-$allow = Get-NetFirewallRule -DisplayName 'RDP-In-4002' -ErrorAction SilentlyContinue
-Result ($allow -and "$($allow.Enabled)" -eq 'True') "firewall allow rule 'RDP-In-4002' present & enabled"
+$allowRuleName = Get-RGProp $cfg 'allowRuleName' 'RDP-Guard-Allow'
+$allow = Get-NetFirewallRule -DisplayName $allowRuleName -ErrorAction SilentlyContinue
+Result ($allow -and "$($allow.Enabled)" -eq 'True') "firewall allow rule '$allowRuleName' present & enabled"
 $listen = Get-NetTCPConnection -State Listen -LocalPort ([int]$cfg.rdpPort) -ErrorAction SilentlyContinue
 Result ($null -ne $listen) "RDP is listening on TCP $($cfg.rdpPort)"
 

@@ -4,9 +4,9 @@
   Installs RDP-Guard and applies RDP hardening. MUST be run as Administrator.
 
 .DESCRIPTION
-  Part A  Firewall: disable stale 3389 rules, replace the duplicate 4002 rules
-          with one clean RDP-In-4002 allow rule (port stays public on purpose -
-          no VPN/geo is possible from the user's side).
+  Part A  Firewall: disable stale 3389 rules, replace ad-hoc/older rules with
+          one clean RDP allow rule for the configured port (port stays public on
+          purpose - no VPN/geo is possible from the user's side).
   Part B  Hardening: password policy, RDP encryption/NLA/TLS, session timeouts,
           larger Security log. Reports on the built-in Administrator + RDP group
           (only disables Administrator if you pass -DisableBuiltinAdmin).
@@ -43,6 +43,7 @@ if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 $cfg  = Get-RGConfig
 $port = [int]$cfg.rdpPort
 $h    = $cfg.hardening
+$allowRuleName = Get-RGProp $cfg 'allowRuleName' 'RDP-Guard-Allow'
 
 Write-Host '==================== RDP-Guard install ====================' -ForegroundColor Cyan
 
@@ -54,13 +55,13 @@ foreach ($d in @('Remote Desktop - User Mode (TCP-In)', 'Remote Desktop - User M
     $r = Get-NetFirewallRule -DisplayName $d -ErrorAction SilentlyContinue
     if ($r) { $r | Disable-NetFirewallRule -ErrorAction SilentlyContinue; Write-Host "  disabled stale rule: $d" }
 }
-foreach ($d in @('01-RDP', 'Allow TCP 4002', 'RDP-In-4002')) {
+foreach ($d in @('01-RDP', 'Allow TCP 4002', 'RDP-In-4002', 'RDP-Guard-Allow', "RDP-In-$port", $allowRuleName) | Select-Object -Unique) {
     Get-NetFirewallRule -DisplayName $d -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
 }
-New-NetFirewallRule -DisplayName 'RDP-In-4002' `
+New-NetFirewallRule -DisplayName $allowRuleName `
     -Description "Intentional public RDP exposure on TCP $port (no VPN/geo possible). Managed by RDP-Guard." `
     -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Profile Any | Out-Null
-Write-Host "  created clean allow rule: RDP-In-4002 (TCP $port, all profiles)"
+Write-Host "  created clean allow rule: $allowRuleName (TCP $port, all profiles)"
 
 # ----------------------------------------------------------------------------
 # Part B - Hardening

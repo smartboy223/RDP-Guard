@@ -147,7 +147,7 @@ function Get-RGActiveIPs {
 
 function Update-RGFirewall {
     # Rebuilds the single block rule from currently-active bans. Block rules
-    # take precedence over the RDP allow rule, so listed IPs cannot reach 4002.
+    # take precedence over the RDP allow rule, so listed IPs cannot reach RDP.
     param([hashtable]$State, $Config)
     $ruleName = Get-RGProp $Config 'blockRuleName' 'RDP-Guard-Block'
     $active   = @(Get-RGActiveIPs -State $State)

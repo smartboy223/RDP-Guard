@@ -21,6 +21,7 @@
   ],
   "eventLogName": "RDP-Guard",
   "eventSource": "RDP-Guard",
+  "allowRuleName": "RDP-Guard-Allow",
   "blockRuleName": "RDP-Guard-Block",
   "stateFile": "state.json",
   "alerts": {
